@@ -39,7 +39,7 @@ ACTION=="add|change", SUBSYSTEM=="power_supply", KERNEL=="$DEVICE", \\
   RUN+="/usr/bin/chmod g+w /sys%p/charge_control_end_threshold /sys%p/charge_control_start_threshold"
 EOF
 sudo udevadm control --reload
-sudo udevadm trigger --name-match="$DEVICE"
+sudo udevadm trigger --sysname-match="$DEVICE"
 
 if ! groups | grep -qw wheel; then
   echo "    Warning: your user isn't in the 'wheel' group, so the rule above won't"
