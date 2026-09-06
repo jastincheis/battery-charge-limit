@@ -52,6 +52,14 @@ set_thresholds() {
     echo "$target_start" > "$START" || fail "couldn't write $target_start to $START"
     echo "$target_end" > "$END" || fail "couldn't write $target_end to $END"
   fi
+
+  # The macsmc-battery driver doesn't call power_supply_changed() when only
+  # the threshold changes, so UPower (and anything reading it, like the
+  # Omarchy panel) never notices the new value on its own. Re-announcing the
+  # device — what `udevadm trigger` does under the hood — nudges UPower to
+  # re-read it. Best-effort: harmless if uevent isn't writable, since the
+  # threshold itself is already applied either way.
+  echo change > "$BASE/uevent" 2>/dev/null || true
 }
 
 case "${1:-status}" in
