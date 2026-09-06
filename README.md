@@ -88,6 +88,28 @@ too if you want.
   same one behind the brightness slider) and matches exact anchor text
   from the panel's source, refusing to touch the file if that text has
   moved, rather than guessing.
+- The slider reads the current limit by shelling out to
+  `battery-charge-limit status` (sysfs directly), not from UPower/
+  `omarchy-battery-status`. On this driver, UPower's cached
+  charge-end-threshold never updates after a write, so a display that
+  trusted it would show the *old* value right after you set a new one —
+  which looks exactly like the slider "snapping back", even once the
+  write itself is working.
+
+### A tempting fix that makes things worse
+
+An earlier version tried to fix that UPower staleness by writing `change`
+to the device's `uevent` file after every threshold write — the same
+mechanism `udevadm trigger` uses to make the kernel re-announce a device.
+**Don't do this.** `93-macsmc-battery-charge-control.rules` (shipped by
+the OS, not by this repo) has no `ACTION==` filter, so that synthetic
+event also re-runs its boot-time restore step, which re-imports whatever
+was last saved to `/etc/udev/macsmc-battery.conf` and writes *that* back
+over the value you just set — racing the systemd path-unit that's
+supposed to save your new value there first. The result: the threshold
+you just set gets silently overwritten a moment later, which is a much
+worse bug than a stale `upower -i` reading. `bin/battery-charge-limit`
+stays sysfs-only for exactly this reason.
 
 ## License
 

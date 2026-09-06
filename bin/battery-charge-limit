@@ -53,13 +53,15 @@ set_thresholds() {
     echo "$target_end" > "$END" || fail "couldn't write $target_end to $END"
   fi
 
-  # The macsmc-battery driver doesn't call power_supply_changed() when only
-  # the threshold changes, so UPower (and anything reading it, like the
-  # Omarchy panel) never notices the new value on its own. Re-announcing the
-  # device — what `udevadm trigger` does under the hood — nudges UPower to
-  # re-read it. Best-effort: harmless if uevent isn't writable, since the
-  # threshold itself is already applied either way.
-  echo change > "$BASE/uevent" 2>/dev/null || true
+  # Deliberately NOT poking $BASE/uevent to nudge UPower here: this device's
+  # own udev rule (93-macsmc-battery-charge-control.rules) has no ACTION
+  # filter, so a synthetic "change" event also replays its boot-time restore
+  # step, which reimports whatever was last saved to
+  # /etc/udev/macsmc-battery.conf and overwrites the value we just set —
+  # racing the systemd path-unit that's supposed to save *this* value there
+  # first. Silently self-reverting a just-applied threshold is worse than a
+  # stale UPower reading, so this stays sysfs-only; callers should read the
+  # threshold back via `battery-charge-limit status`, not UPower.
 }
 
 case "${1:-status}" in

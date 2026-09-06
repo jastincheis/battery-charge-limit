@@ -35,8 +35,8 @@ sudo tee "$RULE" > /dev/null << EOF
 # Installed by battery-charge-limit: let the wheel group set the battery
 # charge limit without root. https://github.com/jastincheis/battery-charge-limit
 ACTION=="add|change", SUBSYSTEM=="power_supply", KERNEL=="$DEVICE", \\
-  RUN+="/usr/bin/chgrp wheel /sys%p/charge_control_end_threshold /sys%p/charge_control_start_threshold /sys%p/uevent", \\
-  RUN+="/usr/bin/chmod g+w /sys%p/charge_control_end_threshold /sys%p/charge_control_start_threshold /sys%p/uevent"
+  RUN+="/usr/bin/chgrp wheel /sys%p/charge_control_end_threshold /sys%p/charge_control_start_threshold", \\
+  RUN+="/usr/bin/chmod g+w /sys%p/charge_control_end_threshold /sys%p/charge_control_start_threshold"
 EOF
 sudo udevadm control --reload
 sudo udevadm trigger --sysname-match="$DEVICE"

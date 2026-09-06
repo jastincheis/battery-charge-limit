@@ -11,6 +11,12 @@ otherwise add by hand, matched against exact anchor text so it fails loudly
 instead of corrupting the file if a future Omarchy version has changed the
 panel's source around those anchors.
 
+The slider reads the current limit via `battery-charge-limit status`
+(sysfs directly), not via omarchy-battery-status/UPower — UPower's cached
+charge-end-threshold for this driver never updates after a write, and we
+also deliberately don't poke a uevent to fix that (see bin/battery-charge-limit
+for why that races the vendor's own persistence rule and self-reverts).
+
 Safe to re-run: it no-ops if the CHARGE LIMIT section is already present.
 """
 import json
@@ -22,6 +28,17 @@ from pathlib import Path
 PLUGINS_DIR = Path.home() / ".config" / "omarchy" / "plugins"
 MARKER = "CHARGE LIMIT"
 
+REFRESH_ANCHOR_OLD = '''    if (!batteryProc.running) batteryProc.running = true
+    if (!profilesProc.running) profilesProc.running = true
+    if (!systemProc.running) systemProc.running = true
+  }'''
+
+REFRESH_ANCHOR_NEW = '''    if (!batteryProc.running) batteryProc.running = true
+    if (!profilesProc.running) profilesProc.running = true
+    if (!systemProc.running) systemProc.running = true
+    if (!limitStatusProc.running) limitStatusProc.running = true
+  }'''
+
 FUNC_ANCHOR_OLD = '''  function setProfile(profile) {
     if (!profile || actionProc.running) return
     actionProc.command = ["omarchy-powerprofiles-set", root.discharging ? "battery" : "ac", profile]
@@ -30,15 +47,15 @@ FUNC_ANCHOR_OLD = '''  function setProfile(profile) {
 
 FUNC_ANCHOR_NEW = FUNC_ANCHOR_OLD + '''
 
-  // The end threshold, parsed out of "N%" or "start-N%" — omarchy-battery-status
-  // reports this whenever the sysfs attribute exists, not just while holding,
-  // so it reflects the configured limit even mid-charge.
-  readonly property int currentChargeLimit: {
-    var t = root.batteryInfo.threshold
-    if (!t) return 100
-    var end = t.indexOf("-") >= 0 ? t.split("-")[1] : t
-    var n = parseInt(end, 10)
-    return isNaN(n) ? 100 : n
+  // Read straight from the CLI (which reads sysfs directly) rather than from
+  // UPower's cached charge-end-threshold: the macsmc-battery driver never
+  // calls power_supply_changed() for a threshold-only write, so UPower's
+  // copy goes stale the moment you change it and never catches up.
+  property int currentChargeLimit: 100
+
+  function updateChargeLimit(raw) {
+    var m = /end=(\\d+)/.exec(raw)
+    if (m) root.currentChargeLimit = parseInt(m[1], 10)
   }
 
   function setChargeLimit(percent) {
@@ -57,6 +74,12 @@ PROC_ANCHOR_NEW = PROC_ANCHOR_OLD + '''
   Process {
     id: limitProc
     onExited: root.refresh()
+  }
+
+  Process {
+    id: limitStatusProc
+    command: ["battery-charge-limit", "status"]
+    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.updateChargeLimit(text) }
   }'''
 
 ROW_ANCHOR_OLD = '''                onHovered: function(h) {
@@ -189,6 +212,7 @@ def main():
         print("Charge limit section already present — nothing to do.")
         return
 
+    text, _ = apply(REFRESH_ANCHOR_OLD, REFRESH_ANCHOR_NEW, text, "refresh function")
     text, _ = apply(FUNC_ANCHOR_OLD, FUNC_ANCHOR_NEW, text, "setProfile function")
     text, _ = apply(PROC_ANCHOR_OLD, PROC_ANCHOR_NEW, text, "actionProc Process")
     text, changed = apply(ROW_ANCHOR_OLD, ROW_ANCHOR_NEW, text, "profile picker Row")
