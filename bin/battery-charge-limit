@@ -1,0 +1,70 @@
+#!/bin/bash
+# battery-charge-limit [status|off|10-100]
+#
+# Sets the maximum charge percentage for the internal battery, by writing
+# the kernel's charge_control_{start,end}_threshold sysfs attributes.
+#
+# The battery device is auto-detected (first power_supply exposing
+# charge_control_end_threshold); override with BATTERY_DEVICE=<name> if you
+# have more than one or auto-detection picks the wrong one.
+set -euo pipefail
+
+usage() { echo "Usage: battery-charge-limit [status|off|10-100]" >&2; exit 1; }
+
+detect_device() {
+  local f
+  for f in /sys/class/power_supply/*/charge_control_end_threshold; do
+    [[ -e $f ]] || continue
+    basename "$(dirname "$f")"
+    return 0
+  done
+  return 1
+}
+
+DEVICE="${BATTERY_DEVICE:-$(detect_device || true)}"
+[[ -n $DEVICE ]] || {
+  echo "battery-charge-limit: no battery with charge_control_end_threshold found under /sys/class/power_supply/." >&2
+  echo "This laptop's battery driver may not support a charge limit, or needs a newer kernel." >&2
+  exit 1
+}
+
+BASE="/sys/class/power_supply/$DEVICE"
+START="$BASE/charge_control_start_threshold"
+END="$BASE/charge_control_end_threshold"
+
+[[ -w $END ]] || {
+  echo "battery-charge-limit: $END is not writable by $(whoami)." >&2
+  echo "Run install.sh (or its udev step) first — see the project README." >&2
+  exit 1
+}
+
+set_thresholds() {
+  local target_start=$1 target_end=$2 cur_end
+  cur_end=$(<"$END")
+  # Keep start<=end valid at every intermediate write, regardless of which
+  # direction we're moving the limit.
+  if (( target_start > cur_end )); then
+    echo "$target_end" > "$END"
+    echo "$target_start" > "$START"
+  else
+    echo "$target_start" > "$START"
+    echo "$target_end" > "$END"
+  fi
+}
+
+case "${1:-status}" in
+  status)
+    echo "device=$DEVICE start=$(<"$START") end=$(<"$END")"
+    ;;
+  off|100)
+    set_thresholds 100 100
+    ;;
+  [1-9]|[1-9][0-9])
+    n=$1
+    (( n >= 10 )) || usage
+    set_thresholds 0 "$n"
+    ;;
+  *)
+    usage
+    ;;
+esac
