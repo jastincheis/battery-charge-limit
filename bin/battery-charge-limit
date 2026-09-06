@@ -11,6 +11,16 @@ set -euo pipefail
 
 usage() { echo "Usage: battery-charge-limit [status|off|10-100]" >&2; exit 1; }
 
+# Surfaces failures as a desktop notification too, not just stderr — this is
+# also called from a GUI slider with no visible terminal, where a write that
+# silently fails just looks like the slider snapping back to the old value
+# for no reason.
+fail() {
+  echo "battery-charge-limit: $1" >&2
+  command -v notify-send > /dev/null && notify-send -u critical "Battery charge limit" "$1"
+  exit 1
+}
+
 detect_device() {
   local f
   for f in /sys/class/power_supply/*/charge_control_end_threshold; do
@@ -22,21 +32,13 @@ detect_device() {
 }
 
 DEVICE="${BATTERY_DEVICE:-$(detect_device || true)}"
-[[ -n $DEVICE ]] || {
-  echo "battery-charge-limit: no battery with charge_control_end_threshold found under /sys/class/power_supply/." >&2
-  echo "This laptop's battery driver may not support a charge limit, or needs a newer kernel." >&2
-  exit 1
-}
+[[ -n $DEVICE ]] || fail "no battery with charge_control_end_threshold found under /sys/class/power_supply/. This laptop's battery driver may not support a charge limit, or needs a newer kernel."
 
 BASE="/sys/class/power_supply/$DEVICE"
 START="$BASE/charge_control_start_threshold"
 END="$BASE/charge_control_end_threshold"
 
-[[ -w $END ]] || {
-  echo "battery-charge-limit: $END is not writable by $(whoami)." >&2
-  echo "Run install.sh (or its udev step) first — see the project README." >&2
-  exit 1
-}
+[[ -w $END ]] || fail "$END is not writable by $(whoami). Run install.sh (or its udev step) first — see the project README."
 
 set_thresholds() {
   local target_start=$1 target_end=$2 cur_end
@@ -44,11 +46,11 @@ set_thresholds() {
   # Keep start<=end valid at every intermediate write, regardless of which
   # direction we're moving the limit.
   if (( target_start > cur_end )); then
-    echo "$target_end" > "$END"
-    echo "$target_start" > "$START"
+    echo "$target_end" > "$END" || fail "couldn't write $target_end to $END"
+    echo "$target_start" > "$START" || fail "couldn't write $target_start to $START"
   else
-    echo "$target_start" > "$START"
-    echo "$target_end" > "$END"
+    echo "$target_start" > "$START" || fail "couldn't write $target_start to $START"
+    echo "$target_end" > "$END" || fail "couldn't write $target_end to $END"
   fi
 }
 
