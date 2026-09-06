@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Adds a "CHARGE LIMIT" button row to the user's Omarchy power panel plugin.
+Adds a CHARGE LIMIT slider to the user's Omarchy power panel plugin.
 
 Omarchy has no plugin API for extending a built-in panel, so this works the
 way Omarchy itself recommends for customizing a built-in widget: clone it
 into ~/.config/omarchy/plugins/ (`omarchy plugin clone omarchy.power`, which
 survives `omarchy update`), then edit the clone. This script does that clone
-(if you don't already have one) and inserts the same three snippets by hand
-that you'd otherwise add yourself, matched against exact anchor text so it
-fails loudly instead of corrupting the file if a future Omarchy version has
-changed the panel's source around those anchors.
+(if you don't already have one) and inserts the same snippets you'd
+otherwise add by hand, matched against exact anchor text so it fails loudly
+instead of corrupting the file if a future Omarchy version has changed the
+panel's source around those anchors.
 
 Safe to re-run: it no-ops if the CHARGE LIMIT section is already present.
 """
@@ -30,7 +30,6 @@ FUNC_ANCHOR_OLD = '''  function setProfile(profile) {
 
 FUNC_ANCHOR_NEW = FUNC_ANCHOR_OLD + '''
 
-  readonly property var chargeLimitOptions: [60, 80, 100]
   // The end threshold, parsed out of "N%" or "start-N%" — omarchy-battery-status
   // reports this whenever the sysfs attribute exists, not just while holding,
   // so it reflects the configured limit even mid-charge.
@@ -85,44 +84,51 @@ ROW_ANCHOR_NEW = '''                onHovered: function(h) {
           }
         }
 
-        // ---------- Charge limit picker ----------
+        // ---------- Charge limit slider ----------
         PanelSeparator {
           foreground: root.bar.foreground
         }
 
         Column {
           width: parent.width
-          spacing: Style.space(10)
+          spacing: Style.space(6)
 
-          PanelSectionHeader {
-            text: "CHARGE LIMIT"
-            foreground: root.bar.foreground
-            fontFamily: root.bar.fontFamily
+          Item {
+            width: parent.width
+            implicitHeight: Math.max(limitHeader.implicitHeight, limitPercent.implicitHeight)
+
+            PanelSectionHeader {
+              id: limitHeader
+              text: "CHARGE LIMIT"
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Text {
+              id: limitPercent
+              text: Math.round(chargeLimitSlider.dragging ? chargeLimitSlider.liveValue : root.currentChargeLimit) + "%"
+              color: Qt.darker(root.bar.foreground, 1.4)
+              font.family: root.bar.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+            }
           }
 
-          Row {
-            id: limitRow
+          PanelSlider {
+            id: chargeLimitSlider
+            bar: root.bar
             width: parent.width
-            spacing: Style.space(6)
-
-            readonly property real cellWidth: (width - spacing * (root.chargeLimitOptions.length - 1)) / root.chargeLimitOptions.length
-
-            Repeater {
-              model: root.chargeLimitOptions
-              Button {
-                required property var modelData
-                width: limitRow.cellWidth
-                text: modelData >= 100 ? "100%" : (modelData + "%")
-                fontSize: Style.font.bodySmall
-                foreground: root.bar.foreground
-                fontFamily: root.bar.fontFamily
-                horizontalPadding: Style.spacing.controlPaddingX
-                verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
-                bordered: true
-                active: root.currentChargeLimit === modelData
-                onClicked: root.setChargeLimit(modelData)
-              }
-            }
+            minimum: 20
+            maximum: 100
+            step: 5
+            integer: true
+            tickCount: 5
+            value: root.currentChargeLimit
+            onReleased: function(v) { root.setChargeLimit(Math.round(v)) }
           }
         }
       }

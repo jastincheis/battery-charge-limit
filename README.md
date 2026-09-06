@@ -1,22 +1,22 @@
 # battery-charge-limit
 
 RO: Setează până la cât procent să se încarce bateria laptopului, ca s-o
-menajezi — cu un buton chiar în panoul de baterie din Omarchy, plus o
-comandă `battery-charge-limit` din terminal.
+menajezi — cu un cursor pe care-l tragi cu mouse-ul chiar în panoul de
+baterie din Omarchy, plus o comandă `battery-charge-limit` din terminal.
 EN: Caps how far your laptop battery is allowed to charge, to preserve its
-health — with a button right in Omarchy's battery panel, plus a
+health — with a drag slider right in Omarchy's battery panel, plus a
 `battery-charge-limit` terminal command.
 
-![Omarchy battery panel with a CHARGE LIMIT row of 60% / 80% / 100% buttons](docs/panel.png)
+![Omarchy battery panel with a CHARGE LIMIT slider](docs/panel.png)
 
 ## Compatibility — read this first
 
 This was built and tested on one specific setup:
 
 - **[Omarchy](https://omarchy.org/)** (the Hyprland/Quickshell-based Arch
-  distro) — the battery-panel button needs Omarchy's shell and its
+  distro) — the battery-panel slider needs Omarchy's shell and its
   `omarchy plugin clone` mechanism. Without Omarchy, `install.sh` still
-  installs the plain `battery-charge-limit` CLI, just without the button.
+  installs the plain `battery-charge-limit` CLI, just without the slider.
 - An **Apple Silicon Mac running Asahi Linux**, whose `macsmc-battery`
   kernel driver exposes `charge_control_end_threshold` in sysfs, and whose
   `macsmc-battery-charge-control` udev/systemd units already persist the
@@ -48,7 +48,7 @@ This will:
    for `sudo` once.
 3. On Omarchy, clone the built-in power panel (if you haven't already —
    see [`omarchy/patch_panel.py`](omarchy/patch_panel.py)) and add a
-   CHARGE LIMIT row of 60% / 80% / 100% buttons to it, then restart the
+   CHARGE LIMIT slider (20–100%, in 5% steps) to it, then restart the
    shell to load it.
 
 ## Usage
@@ -59,7 +59,8 @@ battery-charge-limit 80       # stop charging at 80%
 battery-charge-limit off      # (or 100) no limit — charge to full
 ```
 
-Or just click 60% / 80% / 100% in the battery panel.
+Or just drag the slider in the battery panel — it only writes the new
+threshold once you let go, not on every pixel of the drag.
 
 ## Uninstall
 
@@ -67,9 +68,9 @@ Or just click 60% / 80% / 100% in the battery panel.
 ./uninstall.sh
 ```
 
-Removes the CLI and udev rule. The panel buttons live in your own cloned
-plugin, so they're left as-is — see the script's output for how to remove
-them too if you want.
+Removes the CLI and udev rule. The panel slider lives in your own cloned
+plugin, so it's left as-is — see the script's output for how to remove it
+too if you want.
 
 ## How it works
 
@@ -80,12 +81,13 @@ them too if you want.
   `/etc/udev/rules.d/90-battery-charge-control-permissions.rules`) just
   `chgrp wheel` + `chmod g+w`s those two files on device add/change, so no
   polkit agent or setuid helper is needed.
-- The panel button is a small patch (`omarchy/patch_panel.py`) applied to
+- The panel slider is a small patch (`omarchy/patch_panel.py`) applied to
   your own clone of Omarchy's `omarchy.power` bar plugin — the
   Omarchy-recommended way to customize a built-in widget, so it survives
-  `omarchy update`. It matches exact anchor text from the panel's source
-  and refuses to touch the file if that text has moved, rather than
-  guessing.
+  `omarchy update`. It reuses Omarchy's own `PanelSlider` component (the
+  same one behind the brightness slider) and matches exact anchor text
+  from the panel's source, refusing to touch the file if that text has
+  moved, rather than guessing.
 
 ## License
 
